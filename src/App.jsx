@@ -910,14 +910,26 @@ function getLocalRecipes(mealType, difficulty, dietaryProfile, allergies, pantry
 }
 
 /* ─── DISCOVER VIEW ──────────────────────────────────────────── */
-function DiscoverView({settings, favorites, onSelectRecipe, pantryItems}){
-  const [mealType,   setMealType  ] = useState('lunch');
+function DiscoverView({settings, favorites, onSelectRecipe, pantryItems, initialMealType, onMealTypeUsed}){
+  const [mealType,   setMealType  ] = useState(initialMealType||'lunch');
   const [showFilter, setShowFilter] = useState(false);
   const [filters,    setFilters   ] = useState({difficulty:'Any'});
   const [aiRecipes,  setAiRecipes ] = useState(null);   // null = not yet loaded
   const [loading,    setLoading   ] = useState(false);
   const [error,      setError     ] = useState(null);
   const [seed,       setSeed      ] = useState(0);
+
+  // When coming from Pantry with a chosen meal type, trigger generation immediately
+  useEffect(()=>{
+    if(initialMealType && initialMealType!==mealType){
+      setMealType(initialMealType);
+      loadAI(initialMealType, filters, pantryItems);
+    } else if(initialMealType){
+      loadAI(initialMealType, filters, pantryItems);
+    }
+    if(onMealTypeUsed) onMealTypeUsed();
+  // eslint-disable-next-line
+  },[initialMealType]);
 
   const activeMT = MEAL_TYPES.find(m => m.id === mealType);
   const dp = settings.dietaryProfile && settings.dietaryProfile !== 'none'
@@ -1086,25 +1098,29 @@ function DiscoverView({settings, favorites, onSelectRecipe, pantryItems}){
 }
 
 /* ─── PANTRY VIEW ────────────────────────────────────────────── */
-function PantryView({pantryItems,onChange}){
-  const [q,setQ]=useState('');const [custom,setCust]=useState('');
+function PantryView({pantryItems,onChange,onGenerateWithPantry}){
+  const [q,setQ]=useState('');
+  const [custom,setCust]=useState('');
+  const [showMealPicker,setShowMealPicker]=useState(false);
   const filtered=COMMON_INGREDIENTS.filter(i=>i.toLowerCase().includes(q.toLowerCase())&&!pantryItems.includes(i));
   const toggle=item=>onChange(pantryItems.includes(item)?pantryItems.filter(x=>x!==item):[...pantryItems,item]);
   const addC=()=>{const t=custom.trim();if(t&&!pantryItems.includes(t)){onChange([...pantryItems,t]);setCust('');}};
+
   return(
     <div>
       <div style={{borderBottom:`1px solid ${T.border}`,paddingBottom:14,marginBottom:18}}>
         <p style={{margin:'0 0 2px',fontSize:10,fontWeight:700,letterSpacing:'0.14em',textTransform:'uppercase',color:T.ink3,fontFamily:FB}}>Your kitchen</p>
         <h2 style={{margin:'0 0 3px',fontSize:20,fontFamily:FD,fontWeight:700,color:T.ink}}>My Pantry</h2>
-        <p style={{margin:0,fontSize:12,color:T.ink3,fontFamily:FB}}>Add what you have. Recipes will prioritize these ingredients.</p>
+        <p style={{margin:0,fontSize:12,color:T.ink3,fontFamily:FB}}>Add what you have, then generate recipes using those ingredients.</p>
       </div>
+
       {pantryItems.length>0&&(
         <div style={{background:T.surface,borderRadius:10,padding:'14px 16px',marginBottom:14,border:`1px solid ${T.border}`}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <SectionTitle>{pantryItems.length} on hand</SectionTitle>
             <button onClick={()=>onChange([])} style={{fontSize:10,color:T.red,background:'none',border:'none',cursor:'pointer',fontWeight:700,fontFamily:FB}}>Clear all</button>
           </div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
             {pantryItems.map(item=>(
               <button key={item} onClick={()=>toggle(item)}
                 style={{display:'flex',alignItems:'center',gap:5,background:T.greenBg,border:`1px solid ${T.green}33`,borderRadius:4,padding:'5px 11px',fontSize:12,fontWeight:600,color:T.green,cursor:'pointer',fontFamily:FB}}>
@@ -1112,6 +1128,37 @@ function PantryView({pantryItems,onChange}){
               </button>
             ))}
           </div>
+
+          {/* Generate button */}
+          {!showMealPicker?(
+            <button onClick={()=>setShowMealPicker(true)}
+              style={{width:'100%',background:T.ink,color:'#fff',border:'none',borderRadius:8,padding:'13px',fontWeight:700,fontSize:14,cursor:'pointer',fontFamily:FB,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              <ChefHat size={16}/> Generate recipes with these {pantryItems.length} ingredients
+            </button>
+          ):(
+            <div style={{animation:'slideUp 0.2s ease'}}>
+              <p style={{margin:'0 0 10px',fontSize:11,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:T.ink3,fontFamily:FB}}>What meal?</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                {MEAL_TYPES.map(mt=>{
+                  const Icon=mt.icon;
+                  return(
+                    <button key={mt.id} onClick={()=>{setShowMealPicker(false);onGenerateWithPantry(mt.id);}}
+                      style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderRadius:8,border:`1.5px solid ${mt.dot}`,background:T.surface,cursor:'pointer',transition:'all 0.15s'}}>
+                      <Icon size={18} color={mt.dot}/>
+                      <div style={{textAlign:'left'}}>
+                        <p style={{margin:0,fontSize:13,fontWeight:700,color:T.ink,fontFamily:FB}}>{mt.label}</p>
+                        <p style={{margin:0,fontSize:10,color:T.ink3,fontFamily:FM}}>{mt.ja}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={()=>setShowMealPicker(false)}
+                style={{width:'100%',background:'transparent',border:`1px solid ${T.border}`,borderRadius:8,padding:'9px',fontSize:12,color:T.ink3,cursor:'pointer',fontFamily:FB}}>
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       )}
       <div style={{display:'flex',gap:7,marginBottom:14}}>
@@ -2034,6 +2081,7 @@ function SubmitRecipeForm({onClose,onSubmitted}){
 export default function App(){
   const [view,     setView    ]=useState('discover');
   const [selected, setSelected]=useState(null);
+  const [pantryMealType,setPantryMealType]=useState(null);
   const [settings, setSettings]=usePersist('kc_settings',{weeklyBudget:8000,calorieGoal:2000,dietaryProfile:'none',allergies:[]});
   const [favorites,setFavorites]=usePersist('kc_favorites',[]);
   const [saved,    setSaved   ]=usePersist('kc_saved',[]);
@@ -2109,8 +2157,8 @@ export default function App(){
         </header>
 
         <main style={{padding:'18px 16px 0'}}>
-          {view==='discover'&&<DiscoverView settings={settings} favorites={favorites} onSelectRecipe={handleSelect} pantryItems={pantry}/>}
-          {view==='pantry'  &&<PantryView pantryItems={pantry} onChange={setPantry}/>}
+          {view==='discover'&&<DiscoverView settings={settings} favorites={favorites} onSelectRecipe={handleSelect} pantryItems={pantry} initialMealType={pantryMealType} onMealTypeUsed={()=>setPantryMealType(null)}/>}
+          {view==='pantry'  &&<PantryView pantryItems={pantry} onChange={setPantry} onGenerateWithPantry={mt=>{setPantryMealType(mt);setView('discover');}}/>}
           {view==='shop'    &&<ShoppingView cart={cart} onUpdateCart={setCart}/>}
           {view==='saved'   &&<SavedView savedRecipes={saved} favorites={favorites} onSelectRecipe={handleSelect} onToggleFav={toggleFav}/>}
           {view==='tips'    &&<TipsView/>}
