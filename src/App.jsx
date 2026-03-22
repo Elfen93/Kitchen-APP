@@ -410,7 +410,69 @@ const COMMON_INGREDIENTS = [
 
 /* ─── HELPERS ────────────────────────────────────────────────── */
 const yen    = n => '¥' + Math.round(n||0).toLocaleString();
-const photo  = q => 'https://source.unsplash.com/featured/800x500/?' + encodeURIComponent((q||'japanese food').replace(/['"]/g,'')) + ',food,dish';
+// Photo: uses Unsplash topic-based URLs (no API key needed)
+// Falls back to a food-colored placeholder if image fails
+const FOOD_PHOTOS = {
+  // breakfast
+  'rice bowl egg': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'miso soup tofu': 'https://images.unsplash.com/photo-1547592180-85f173990554?w=800&q=80',
+  'buttered toast egg': 'https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=800&q=80',
+  'natto rice bowl': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'oatmeal banana bowl': 'https://images.unsplash.com/photo-1517093157656-b9eccef91cb1?w=800&q=80',
+  'yogurt granola berries bowl': 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80',
+  // snacks
+  'tuna mayo onigiri japanese': 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80',
+  'edamame salt bowl': 'https://images.unsplash.com/photo-1515543904379-3d757afe72e4?w=800&q=80',
+  'pan fried gyoza dumplings': 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&q=80',
+  // lunch
+  'shoyu ramen soup noodles': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'japanese curry rice bowl': 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=800&q=80',
+  'gyudon beef rice bowl': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'cold soba noodles dipping sauce': 'https://images.unsplash.com/photo-1569050467447-ce54b3bbc37d?w=800&q=80',
+  'chinese fried rice wok': 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&q=80',
+  'udon noodles egg broth': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'tofu vegetable stir fry bowl': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+  'salmon rice bowl japanese': 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800&q=80',
+  'avocado tuna salad bowl': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+  // dinner
+  'chicken teriyaki rice plate': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'pork cabbage stir fry japanese': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+  'miso glazed salmon fillet': 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800&q=80',
+  'nikujaga japanese meat potato stew': 'https://images.unsplash.com/photo-1547592180-85f173990554?w=800&q=80',
+  'japanese nabe hot pot': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'vegetable hot pot tofu': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+  'tomato egg stir fry chinese': 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=800&q=80',
+  'mentaiko pasta japanese cream sauce': 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=800&q=80',
+  'mapo tofu spicy sichuan': 'https://images.unsplash.com/photo-1547592180-85f173990554?w=800&q=80',
+  'japanese karaage fried chicken': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'grilled mackerel fish japanese': 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800&q=80',
+  'oyakodon chicken egg rice bowl': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80',
+  'kimchi fried rice egg korean': 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&q=80',
+  'yaki udon stir fried noodles': 'https://images.unsplash.com/photo-1569050467447-ce54b3bbc37d?w=800&q=80',
+  'spinach sesame salad japanese': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+  'tofu steak sesame sauce pan': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+  'tofu egg stir fry protein': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80',
+};
+
+// Generic food photos by category — used when no exact match
+const GENERIC_FOOD = [
+  'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=800&q=80', // bowl
+  'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80', // salad
+  'https://images.unsplash.com/photo-1547592180-85f173990554?w=800&q=80',   // japanese
+  'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&q=80', // rice
+  'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&q=80', // fried rice
+  'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800&q=80', // fish
+  'https://images.unsplash.com/photo-1569050467447-ce54b3bbc37d?w=800&q=80', // noodles
+  'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=800&q=80',    // pasta
+];
+
+const photo = q => {
+  const key = (q||'').toLowerCase().trim();
+  if (FOOD_PHOTOS[key]) return FOOD_PHOTOS[key];
+  // Pick a consistent generic photo based on the query string
+  const idx = key.split('').reduce((a,c) => a + c.charCodeAt(0), 0) % GENERIC_FOOD.length;
+  return GENERIC_FOOD[idx];
+};
 const season = () => { const m=new Date().getMonth(); return m>=2&&m<=4?'spring':m>=5&&m<=7?'summer':m>=8&&m<=10?'autumn':'winter'; };
 
 /* ─── HOOKS ──────────────────────────────────────────────────── */
