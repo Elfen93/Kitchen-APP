@@ -25,6 +25,7 @@ export function addRecipeToList(list, recipe) {
         key,
         en: ing.en.replace(/\s*\(.*?\)\s*/g, ' ').trim() || ing.en,
         ja: ing.ja || '',
+        label: ing.label && ing.label !== ing.en ? ing.label : '',
         unit: ing.unit || 'g',
         amount: Number(ing.amount) || 0,
         price: Number(ing.price) || 0,

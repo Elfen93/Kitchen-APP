@@ -5,8 +5,10 @@ import { RECIPES } from '../data/recipes.js';
 import { DIET_PROFILES, DIFFICULTIES, MEAL_TYPES } from '../data/guide.js';
 import { isAllowed, pantryMatches } from '../lib/diet.js';
 import { costPerServing, recipeKey, totalTime } from '../lib/recipe.js';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function DiscoverView({ settings, pantry, favKeys, onOpen, ai, onGenerate, usePantryFirst, setUsePantryFirst }) {
+  const { t, tg, loc } = useI18n();
   const [meal, setMeal] = useState(defaultMeal());
   const [difficulty, setDifficulty] = useState('Any');
   const [cheapOnly, setCheapOnly] = useState(false);
@@ -26,7 +28,8 @@ export default function DiscoverView({ settings, pantry, favKeys, onOpen, ai, on
       if (cheapOnly && costPerServing(r) > mealBudget) return false;
       if (quick && totalTime(r) > 15) return false;
       if (needle) {
-        const hay = `${r.title} ${r.titleJa} ${r.ingredients.map((i) => `${i.en} ${i.ja}`).join(' ')}`.toLowerCase();
+        const v = loc(r);
+        const hay = `${r.title} ${v.title} ${r.titleJa} ${v.ingredients.map((i) => `${i.en} ${i.ja} ${i.label || ''}`).join(' ')}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -35,16 +38,16 @@ export default function DiscoverView({ settings, pantry, favKeys, onOpen, ai, on
       pool.sort((a, b) => pantryMatches(b, pantry) - pantryMatches(a, pantry));
     }
     return { shown: pool, hidden: hiddenCount };
-  }, [fresh, meal, settings.diet, settings.allergies, difficulty, cheapOnly, quick, q, mealBudget, usePantryFirst, pantry]);
+  }, [loc, fresh, meal, settings.diet, settings.allergies, difficulty, cheapOnly, quick, q, mealBudget, usePantryFirst, pantry]);
 
   const loading = ai.loading === meal;
 
   return (
     <>
-      <div className="seg mb" role="group" aria-label="Meal">
+      <div className="seg mb" role="group" aria-label={t('mealGroup')}>
         {MEAL_TYPES.map((m) => (
           <button key={m.id} className="chip" aria-pressed={meal === m.id} onClick={() => setMeal(m.id)}>
-            {m.label} <small className="ja">{m.ja}</small>
+            {tg(m.label)}{tg(m.label) !== m.ja && <small className="ja">{m.ja}</small>}
           </button>
         ))}
       </div>
@@ -53,46 +56,47 @@ export default function DiscoverView({ settings, pantry, favKeys, onOpen, ai, on
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <Sparkles size={20} style={{ marginTop: 2, flexShrink: 0 }} />
           <div className="grow">
-            <p style={{ fontWeight: 700 }}>Need new ideas?</p>
+            <p style={{ fontWeight: 700 }}>{t('needIdeas')}</p>
             <p className="small faint">
-              Get {MEAL_TYPES.find((m) => m.id === meal).label.toLowerCase()} recipes made for your budget
-              {diet && diet.id !== 'none' ? `, ${diet.label.toLowerCase()} diet` : ''}
-              {settings.allergies.length ? ' and allergies' : ''}
-              {pantry.length ? `, using your ${pantry.length} pantry items` : ''}.
+              {t('ideasBody', {
+                meal: t(`meal_${meal}`),
+                diet: diet && diet.id !== 'none' ? tg(diet.label).toLowerCase() : '',
+                allergies: settings.allergies.length > 0,
+                pantry: pantry.length,
+              })}
             </p>
           </div>
         </div>
         <button className="btn accent block mt" disabled={loading} onClick={() => onGenerate({ meal, difficulty })}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> {loading ? 'Cooking up ideas…' : 'Generate 4 recipes'}
+          <RefreshCw size={16} className={loading ? 'spin' : ''} /> {loading ? t('generating') : t('generate')}
         </button>
       </div>
 
       {ai.error && ai.errorMeal === meal && (
-        <div className="notice mb" role="status"><AlertCircle size={16} /><span>{ai.error} The recipe library below still works offline.</span></div>
+        <div className="notice mb" role="status"><AlertCircle size={16} /><span>{t(ai.error)} {t('offlineStill')}</span></div>
       )}
       {ai.dropped > 0 && ai.droppedMeal === meal && (
-        <div className="notice info mb"><AlertCircle size={16} /><span>{ai.dropped} generated recipe{ai.dropped === 1 ? '' : 's'} removed because {ai.dropped === 1 ? 'it' : 'they'} conflicted with your diet or allergies.</span></div>
+        <div className="notice info mb"><AlertCircle size={16} /><span>{t('dropped', { n: ai.dropped })}</span></div>
       )}
 
       <div className="row mb">
         <div className="grow" style={{ position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: 12, top: 14, color: 'var(--ink-3)' }} />
-          <input className="input" style={{ paddingLeft: 36 }} placeholder="Search dish or ingredient (EN / 日本語)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search recipes" />
+          <input className="input" style={{ paddingLeft: 36 }} placeholder={t('searchPh')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('searchPh')} />
         </div>
       </div>
 
-      <div className="seg mb" role="group" aria-label="Filters">
-        <button className="chip good" aria-pressed={cheapOnly} onClick={() => setCheapOnly((v) => !v)}>Within budget</button>
-        <button className="chip" aria-pressed={quick} onClick={() => setQuick((v) => !v)}>≤ 15 min</button>
-        {pantry.length > 0 && <button className="chip" aria-pressed={usePantryFirst} onClick={() => setUsePantryFirst((v) => !v)}>Pantry first</button>}
+      <div className="seg mb" role="group" aria-label={t('filters')}>
+        <button className="chip good" aria-pressed={cheapOnly} onClick={() => setCheapOnly((v) => !v)}>{t('withinBudget')}</button>
+        <button className="chip" aria-pressed={quick} onClick={() => setQuick((v) => !v)}>{t('quick')}</button>
+        {pantry.length > 0 && <button className="chip" aria-pressed={usePantryFirst} onClick={() => setUsePantryFirst((v) => !v)}>{t('pantryFirst')}</button>}
         {DIFFICULTIES.slice(1).map((d) => (
-          <button key={d} className="chip" aria-pressed={difficulty === d} onClick={() => setDifficulty((cur) => (cur === d ? 'Any' : d))}>{d}</button>
+          <button key={d} className="chip" aria-pressed={difficulty === d} onClick={() => setDifficulty((cur) => (cur === d ? 'Any' : d))}>{tg(d)}</button>
         ))}
       </div>
 
       <p className="small faint mb">
-        {shown.length} recipe{shown.length === 1 ? '' : 's'} · about ¥{Math.round(mealBudget)} per meal on your budget
-        {hidden > 0 ? ` · ${hidden} hidden by your diet/allergies` : ''}
+        {t('countLine', { n: shown.length, perMeal: Math.round(mealBudget), hidden })}
       </p>
 
       <div className="stack">
@@ -103,8 +107,8 @@ export default function DiscoverView({ settings, pantry, favKeys, onOpen, ai, on
         {!shown.length && !loading && (
           <div className="empty card">
             <div className="big">🍳</div>
-            <h3>Nothing matches</h3>
-            <p className="small">Loosen a filter, or generate recipes that fit your profile.</p>
+            <h3>{t('nothingMatches')}</h3>
+            <p className="small">{t('nothingMatchesBody')}</p>
           </div>
         )}
       </div>

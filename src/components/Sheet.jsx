@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '../i18n/index.jsx';
 
 /** Bottom sheet / dialog. Closes on backdrop tap and Escape. */
 export default function Sheet({ title, eyebrow, onClose, children, labelledBy }) {
+  const { t } = useI18n();
   const ref = useRef(null);
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -26,7 +28,7 @@ export default function Sheet({ title, eyebrow, onClose, children, labelledBy })
               {eyebrow && <p className="eyebrow" style={{ marginBottom: 2 }}>{eyebrow}</p>}
               <h2 id={labelledBy}>{title}</h2>
             </div>
-            <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+            <button className="icon-btn" onClick={onClose} aria-label={t('close')}><X size={18} /></button>
           </div>
         )}
         {children}

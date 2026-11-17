@@ -38,11 +38,18 @@ function roundAmount(x, unit) {
   return Math.round(x * 10) / 10;
 }
 
-export function formatAmount(amount, unit) {
+const UNIT_WORDS = {
+  en: { unit: (n) => `×${n}`, pack: (n, one) => `${n} pack${one ? '' : 's'}` },
+  es: { unit: (n) => `×${n}`, pack: (n, one) => `${n} paquete${one ? '' : 's'}` },
+  ja: { unit: (n) => `${n}個`, pack: (n) => `${n}パック` },
+};
+
+export function formatAmount(amount, unit, lang = 'en') {
   const n = Number(amount) || 0;
   const pretty = Number.isInteger(n) ? n : n.toFixed(1).replace(/\.0$/, '');
-  if (unit === 'unit') return `×${pretty}`;
-  if (unit === 'pack') return `${pretty} pack${n === 1 ? '' : 's'}`;
+  const words = UNIT_WORDS[lang] || UNIT_WORDS.en;
+  if (unit === 'unit') return words.unit(pretty);
+  if (unit === 'pack') return words.pack(pretty, n === 1);
   return `${pretty} ${unit || 'g'}`;
 }
 

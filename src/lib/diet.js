@@ -127,6 +127,8 @@ export function pantryMatches(recipe, pantry = []) {
   return (recipe.ingredients || []).filter((i) => {
     const en = (i.en || '').toLowerCase().replace(/\(.*?\)/g, '').trim();
     const ja = i.ja || '';
-    return words.some((w) => en.includes(w) || (en && w.includes(en)) || (ja && w.includes(ja)) || ja.includes(w));
+    const label = (i.label || '').toLowerCase().replace(/[(（].*?[)）]/g, '').trim(); // localized name, if any
+    return words.some((w) => en.includes(w) || (en && w.includes(en)) || (ja && w.includes(ja)) || ja.includes(w)
+      || (label && (label.includes(w) || w.includes(label))));
   }).length;
 }

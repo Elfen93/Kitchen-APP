@@ -2,11 +2,12 @@
 // for structured JSON. The browser only sends preferences, never a raw prompt
 // or model name, so the API key can't be used as a general-purpose proxy.
 import Anthropic from '@anthropic-ai/sdk';
-import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { readBody, originAllowed, clientIp, rateLimited, str } from './_lib/http.js';
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
+const LANGS = { en: 'English', es: 'Spanish', ja: 'Japanese' };
 
 const MEALS = {
   breakfast: 'quick Japanese-style or simple breakfasts (rice, eggs, miso soup, toast sets, oatmeal, yogurt)',
@@ -50,6 +51,13 @@ const Recipe = z.object({
   steps: z.array(z.string()),
   ingredients: z.array(Ingredient),
   tip: z.string().describe('One practical money-saving or shopping tip for this dish in Japan'),
+  translation: z.object({
+    title: z.string(),
+    steps: z.array(z.string()),
+    ingredients: z.array(z.string()).describe('Ingredient names in the same order as ingredients'),
+    equipment: z.array(z.string()),
+    tip: z.string(),
+  }).describe('The same recipe in the requested display language; copy the English if the display language is English'),
 });
 
 const Output = z.object({ recipes: z.array(Recipe) });
@@ -65,6 +73,8 @@ function buildPrompt(p) {
     'Use only ingredients sold at ordinary Japanese supermarkets (Gyomu Super, OK, Life, Aeon) and a small apartment kitchen: one or two burners, a rice cooker, a microwave, usually no oven.',
     'Prices are the yen cost of the amount used, not the full package. Keep them realistic; do not undercount.',
     'Steps should be short, concrete and in order, written for someone who does not read Japanese.',
+    'Write title, steps, ingredient "en", equipment and tip in English, ingredient "ja" as printed on Japanese labels.',
+    `Also fill "translation" with the same recipe in ${LANGS[p.lang]} (same order and number of steps, ingredients and equipment).`,
   ];
   if (p.difficulty !== 'Any') lines.push(`Difficulty: ${p.difficulty}.`);
   if (p.maxCostPerServing) lines.push(`Keep the cost per serving under about ¥${p.maxCostPerServing}.`);
@@ -98,6 +108,7 @@ export default async function handler(req, res) {
     allergies: list(b.allergies, 15, 40),
     pantry: list(b.pantry, 30, 40),
     avoid: list(b.avoid, 20, 60),
+    lang: LANGS[b.lang] ? b.lang : 'en',
     count: Math.min(6, Math.max(1, Number(b.count) || 4)),
     maxCostPerServing: Math.min(3000, Math.max(0, Math.round(Number(b.maxCostPerServing) || 0))),
     calorieTarget: Math.min(1500, Math.max(0, Math.round(Number(b.calorieTarget) || 0))),
@@ -105,12 +116,10 @@ export default async function handler(req, res) {
 
   const client = new Anthropic();
   try {
-    const msg = await client.beta.messages.parse({
+    const msg = await client.messages.parse({
       model: MODEL,
       max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low', format: betaZodOutputFormat(Output) },
+      output_config: { effort: 'low', format: zodOutputFormat(Output) },
       system: 'You are a practical home-cooking assistant for people on low incomes living in Japan, many of them recently arrived. You write honest, cheap, filling recipes.',
       messages: [{ role: 'user', content: buildPrompt(p) }],
     });
@@ -119,7 +128,11 @@ export default async function handler(req, res) {
     if (msg.stop_reason === 'max_tokens' || !msg.parsed_output) {
       return res.status(502).json({ error: 'The recipe response was incomplete. Please try again.' });
     }
-    const recipes = msg.parsed_output.recipes.slice(0, p.count).map((r) => ({ ...r, mealType: p.mealType }));
+    const recipes = msg.parsed_output.recipes.slice(0, p.count).map(({ translation, ...r }) => ({
+      ...r,
+      mealType: p.mealType,
+      i18n: p.lang !== 'en' && translation ? { [p.lang]: translation } : {},
+    }));
     return res.status(200).json({ recipes });
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {

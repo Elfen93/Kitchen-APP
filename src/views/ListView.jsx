@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Check, Plus, ShoppingBasket, Trash2 } from 'lucide-react';
 import { addManualItem, listTotals } from '../lib/shopping.js';
 import { formatAmount, yen } from '../lib/recipe.js';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function ListView({ list, setList, onFinish }) {
+  const { t, lang } = useI18n();
   const [name, setName] = useState('');
   const [bigJa, setBigJa] = useState(false);
   const { total, inBasket, remaining } = listTotals(list);
@@ -21,11 +23,11 @@ export default function ListView({ list, setList, onFinish }) {
     <>
       <div className="section-head row">
         <div className="grow">
-          <h2>Shopping list</h2>
-          <p>{list.length ? `${list.length} items · about ${yen(total)}` : 'Add ingredients from any recipe.'}</p>
+          <h2>{t('shoppingList')}</h2>
+          <p>{list.length ? t('listSummary', { n: list.length, total: yen(total) }) : t('listEmptyHint')}</p>
         </div>
         {list.length > 0 && (
-          <button className="chip" aria-pressed={bigJa} onClick={() => setBigJa((v) => !v)} title="Large Japanese names to show to store staff">
+          <button className="chip" aria-pressed={bigJa} onClick={() => setBigJa((v) => !v)} title={t('jaMode')} aria-label={t('jaMode')}>
             日本語
           </button>
         )}
@@ -33,53 +35,53 @@ export default function ListView({ list, setList, onFinish }) {
 
       {list.length > 0 && (
         <div className="totals mb">
-          <div className="stat"><b>{yen(total)}</b><small>estimate</small></div>
-          <div className="stat"><b style={{ color: 'var(--good)' }}>{yen(inBasket)}</b><small>in basket</small></div>
-          <div className="stat"><b>{yen(remaining)}</b><small>to get</small></div>
+          <div className="stat"><b>{yen(total)}</b><small>{t('estimate')}</small></div>
+          <div className="stat"><b style={{ color: 'var(--good)' }}>{yen(inBasket)}</b><small>{t('inBasket')}</small></div>
+          <div className="stat"><b>{yen(remaining)}</b><small>{t('toGet')}</small></div>
         </div>
       )}
 
       <form className="row mb" onSubmit={add}>
-        <input className="input grow" placeholder="Add an item" value={name} onChange={(e) => setName(e.target.value)} aria-label="Add item to list" />
-        <button className="icon-btn" type="submit" aria-label="Add"><Plus size={18} /></button>
+        <input className="input grow" placeholder={t('addItem')} value={name} onChange={(e) => setName(e.target.value)} aria-label={t('addItem')} />
+        <button className="icon-btn" type="submit" aria-label={t('add')}><Plus size={18} /></button>
       </form>
 
       {list.length === 0 ? (
         <div className="empty card">
           <div className="big"><ShoppingBasket size={40} /></div>
-          <h3>Your list is empty</h3>
-          <p className="small">Open a recipe, tick what you already have and add the rest. The same ingredient from several recipes is merged into one line.</p>
+          <h3>{t('listEmpty')}</h3>
+          <p className="small">{t('listEmptyBody')}</p>
         </div>
       ) : (
         <div className="stack" style={{ gap: 6 }}>
           {list.map((i) => (
             <div key={i.key} className={`list-item ${i.checked ? 'done' : ''}`}>
-              <button className={`tick ${i.checked ? 'on' : ''}`} onClick={() => toggle(i.key)} aria-pressed={i.checked} aria-label={`Got ${i.en}`}>
+              <button className={`tick ${i.checked ? 'on' : ''}`} onClick={() => toggle(i.key)} aria-pressed={i.checked} aria-label={`${t('got')} ${i.label || i.en}`}>
                 {i.checked && <Check size={14} />}
               </button>
               <div className="grow" onClick={() => toggle(i.key)} style={{ cursor: 'pointer' }}>
                 {bigJa && i.ja ? (
                   <>
                     <p className="ja-big ja" style={{ fontSize: 22 }}>{i.ja}</p>
-                    <p className="small faint">{i.en}</p>
+                    <p className="small faint">{i.label || i.en}</p>
                   </>
                 ) : (
                   <>
-                    <p className="name" style={{ fontWeight: 600 }}>{i.en} {i.ja && <span className="ja faint small">{i.ja}</span>}</p>
+                    <p className="name" style={{ fontWeight: 600 }}>{i.label || i.en} {i.ja && lang !== 'ja' && <span className="ja faint small">{i.ja}</span>}</p>
                     <p className="small faint">
-                      {i.manual ? 'Added by you' : formatAmount(i.amount, i.unit)}
+                      {i.manual ? t('addedByYou') : formatAmount(i.amount, i.unit, lang)}
                       {i.from?.length ? ` · ${i.from.join(', ')}` : ''}
                     </p>
                   </>
                 )}
               </div>
               <span className="mono small">{i.price ? yen(i.price) : ''}</span>
-              <button className="remove" onClick={() => remove(i.key)} aria-label={`Remove ${i.en}`}><Trash2 size={16} /></button>
+              <button className="remove" onClick={() => remove(i.key)} aria-label={`${t('remove')} ${i.label || i.en}`}><Trash2 size={16} /></button>
             </div>
           ))}
 
           <FinishBox checked={checked} estimate={inBasket} onFinish={(paid) => { onFinish(paid); setList((l) => l.filter((i) => !i.checked)); }} />
-          <button className="btn ghost sm" onClick={() => setList([])}>Clear whole list</button>
+          <button className="btn ghost sm" onClick={() => setList([])}>{t('clearList')}</button>
         </div>
       )}
     </>
@@ -87,15 +89,16 @@ export default function ListView({ list, setList, onFinish }) {
 }
 
 function FinishBox({ checked, estimate, onFinish }) {
+  const { t } = useI18n();
   const [paid, setPaid] = useState('');
   if (!checked.length) return null;
   return (
     <div className="card mt">
-      <p className="eyebrow">Done shopping?</p>
-      <p className="small muted">Enter what the receipt says (estimate {yen(estimate)}). It's added to this week's spending and the {checked.length} ticked item{checked.length === 1 ? '' : 's'} leave the list.</p>
+      <p className="eyebrow">{t('doneShopping')}</p>
+      <p className="small muted">{t('doneBody', { est: yen(estimate), n: checked.length })}</p>
       <div className="row mt">
-        <input className="input grow" inputMode="numeric" placeholder={String(Math.round(estimate))} value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ''))} aria-label="Amount paid in yen" />
-        <button className="btn primary" onClick={() => onFinish(Number(paid) || Math.round(estimate))}>Log ¥</button>
+        <input className="input grow" inputMode="numeric" placeholder={String(Math.round(estimate))} value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ''))} aria-label={t('amountPaid')} />
+        <button className="btn primary" onClick={() => onFinish(Number(paid) || Math.round(estimate))}>{t('logYen')}</button>
       </div>
     </div>
   );

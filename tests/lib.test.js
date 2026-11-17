@@ -92,3 +92,29 @@ describe('steps are scanned too', () => {
     expect(isAllowed(byTitle('Pork & Cabbage Stir-fry'), 'gluten', [])).toBe(false);
   });
 });
+
+describe('i18n', async () => {
+  const { localizeRecipe, makeT } = await import('../src/i18n/index.jsx');
+  const { UI } = await import('../src/i18n/ui.js');
+  it('every UI key exists in es and ja', () => {
+    for (const k of Object.keys(UI.en)) {
+      expect(UI.es[k], `es:${k}`).toBeDefined();
+      expect(UI.ja[k], `ja:${k}`).toBeDefined();
+    }
+  });
+  it('localizes library recipes without touching the source fields', () => {
+    const r = byTitle('Oyakodon');
+    const es = localizeRecipe(r, 'es');
+    expect(es.title).not.toBe(r.title);
+    expect(es.ingredients[0].en).toBe(r.ingredients[0].en);
+    expect(es.ingredients[0].label).toBeTruthy();
+    expect(es.steps).toHaveLength(r.steps.length);
+  });
+  it('interpolates', () => {
+    expect(makeT('es')('addToList', { n: 2 })).toBe('Añadir 2 productos a la lista');
+  });
+  it('pantry matches localized names', () => {
+    const r = localizeRecipe(byTitle('Tamago Gohan'), 'es');
+    expect(pantryMatches(r, ['huevo'])).toBe(1);
+  });
+});

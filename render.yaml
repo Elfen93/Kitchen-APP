@@ -1,0 +1,21 @@
+# Render Blueprint: one web service that builds the app and runs server.js.
+# Secrets (ANTHROPIC_API_KEY, DATABASE_URL) are entered in the Render dashboard.
+services:
+  - type: web
+    name: kaimono-cook
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5

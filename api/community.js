@@ -1,29 +1,27 @@
 // /api/community — shared recipes submitted by users.
 //
-// Storage: any Redis with an Upstash-compatible REST API (Upstash, or Vercel's
-// Redis/KV integration, which sets KV_REST_API_URL / KV_REST_API_TOKEN).
-// Without those variables the endpoint answers 503 and the app shows the
-// feature as unavailable instead of breaking.
+// Storage: Postgres via Neon's serverless driver (DATABASE_URL). Without it
+// the endpoint answers 503 and the app shows the feature as unavailable.
+// Schema: db/schema.sql (also created automatically on first request).
+// Moderation: UPDATE community_recipes SET hidden = true WHERE id = …;
+import { neon } from '@neondatabase/serverless';
 import { readBody, originAllowed, clientIp, rateLimited, str } from './_lib/http.js';
 
-const URL_ = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-const LIST = 'kc:recipes';
-const LIKES = 'kc:likes';
-const MAX_RECIPES = 500;
+const DB_URL = process.env.DATABASE_URL;
+const sql = DB_URL ? neon(DB_URL) : null;
+const PAGE = 200;
 
-async function redis(commands) {
-  const r = await fetch(`${URL_}/pipeline`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(commands),
-  });
-  if (!r.ok) throw new Error(`redis ${r.status}`);
-  const out = await r.json();
-  return out.map((x) => {
-    if (x.error) throw new Error(x.error);
-    return x.result;
-  });
+let ready;
+function ensureSchema() {
+  ready ??= (async () => {
+    await sql`CREATE TABLE IF NOT EXISTS community_recipes (
+      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      recipe JSONB NOT NULL,
+      likes INTEGER NOT NULL DEFAULT 0,
+      hidden BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+  })().catch((e) => { ready = undefined; throw e; });
+  return ready;
 }
 
 const num = (v, min, max, d) => {
@@ -61,22 +59,20 @@ function cleanRecipe(r) {
 }
 
 export default async function handler(req, res) {
-  if (!URL_ || !TOKEN) return res.status(503).json({ error: 'Community recipes are not set up on this server.' });
+  if (!sql) return res.status(503).json({ error: 'Community recipes are not set up on this server.' });
   if (!originAllowed(req)) return res.status(403).json({ error: 'Origin not allowed' });
 
   try {
+    await ensureSchema();
+
     if (req.method === 'GET') {
-      const [ids] = await redis([['LRANGE', LIST, '0', String(MAX_RECIPES - 1)]]);
-      if (!ids?.length) return res.status(200).json({ recipes: [] });
-      const [raw, likes] = await redis([['MGET', ...ids.map((id) => `kc:r:${id}`)], ['HGETALL', LIKES]]);
-      const likeMap = {};
-      for (let i = 0; i < (likes || []).length; i += 2) likeMap[likes[i]] = Number(likes[i + 1]) || 0;
-      let recipes = raw
-        .map((s, i) => { try { return s ? { ...JSON.parse(s), id: ids[i], likes: likeMap[ids[i]] || 0 } : null; } catch { return null; } })
-        .filter(Boolean);
-      if (req.query?.sort === 'top') recipes = recipes.sort((a, b) => b.likes - a.likes);
-      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
-      return res.status(200).json({ recipes });
+      const rows = req.query?.sort === 'top'
+        ? await sql`SELECT id, recipe, likes, created_at FROM community_recipes WHERE NOT hidden ORDER BY likes DESC, created_at DESC LIMIT ${PAGE}`
+        : await sql`SELECT id, recipe, likes, created_at FROM community_recipes WHERE NOT hidden ORDER BY created_at DESC LIMIT ${PAGE}`;
+      res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
+      return res.status(200).json({
+        recipes: rows.map((r) => ({ ...r.recipe, id: String(r.id), likes: r.likes, createdAt: r.created_at })),
+      });
     }
 
     if (req.method === 'POST') {
@@ -84,26 +80,20 @@ export default async function handler(req, res) {
       const ip = clientIp(req);
 
       if (body.action === 'like') {
-        const id = str(body.id, 40);
-        if (!/^[a-z0-9]+$/.test(id)) return res.status(400).json({ error: 'Bad id' });
+        const id = str(String(body.id ?? ''), 20);
+        if (!/^\d+$/.test(id)) return res.status(400).json({ error: 'Bad id' });
         if (rateLimited(`like:${ip}`, 60, 60 * 60 * 1000)) return res.status(429).json({ error: 'Slow down' });
-        const [exists] = await redis([['EXISTS', `kc:r:${id}`]]);
-        if (!exists) return res.status(404).json({ error: 'Not found' });
-        const [likes] = await redis([['HINCRBY', LIKES, id, '1']]);
-        return res.status(200).json({ likes });
+        const rows = await sql`UPDATE community_recipes SET likes = likes + 1 WHERE id = ${id} AND NOT hidden RETURNING likes`;
+        if (!rows.length) return res.status(404).json({ error: 'Not found' });
+        return res.status(200).json({ likes: rows[0].likes });
       }
 
       if (body.action === 'submit') {
         if (rateLimited(`sub:${ip}`, 5, 60 * 60 * 1000)) return res.status(429).json({ error: 'Too many submissions — try again later.' });
         const recipe = cleanRecipe(body.recipe);
         if (!recipe) return res.status(400).json({ error: 'A recipe needs a title, at least one ingredient and one step.' });
-        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        await redis([
-          ['SET', `kc:r:${id}`, JSON.stringify({ ...recipe, createdAt: Date.now() })],
-          ['LPUSH', LIST, id],
-          ['LTRIM', LIST, '0', String(MAX_RECIPES - 1)],
-        ]);
-        return res.status(201).json({ id });
+        const rows = await sql`INSERT INTO community_recipes (recipe) VALUES (${JSON.stringify(recipe)}::jsonb) RETURNING id`;
+        return res.status(201).json({ id: String(rows[0].id) });
       }
       return res.status(400).json({ error: 'Unknown action' });
     }

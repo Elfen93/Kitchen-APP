@@ -14,7 +14,11 @@ have just arrived and can't read supermarket labels yet.
   Bonito dashi counts as fish, soy sauce counts as wheat, mirin counts as alcohol. Generated
   recipes are re-checked on the device and dropped if they conflict.
 - **Guide** — which stores are cheap for what, label words (半額, 消費期限…), seasonal produce.
-- **Community** — optional shared recipes (needs a Redis store, see below).
+- **Photos** — each dish gets a freely licensed photo from Wikipedia / Wikimedia Commons, with
+  the author and licence shown. If none is found, an emoji is shown instead.
+- **English, Español, 日本語** — the whole interface, the 40 library recipes and the guide.
+  Generated recipes come back in the chosen language too.
+- **Community** — optional shared recipes, stored in Postgres (Neon).
 
 Everything personal (budget, pantry, list, favourites, prices) stays in the browser's
 localStorage. There are no accounts and no analytics.
@@ -22,13 +26,16 @@ localStorage. There are no accounts and no analytics.
 ## Stack
 
 - React 18 + Vite (no UI framework, one CSS file with light/dark tokens)
-- Vercel serverless functions in `api/`
-- Claude API via the official `@anthropic-ai/sdk`, with structured outputs (Zod schema)
+- API handlers in `api/`, run either by `server.js` (Express — Render or any Node host) or as
+  Vercel serverless functions
+- Claude Haiku 5.5 via the official `@anthropic-ai/sdk`, with structured outputs (Zod schema)
+- Neon Postgres (`@neondatabase/serverless`) for community recipes
 
 ```
 api/
   generate.js        POST — builds the prompt server-side, returns validated recipe JSON
-  community.js       GET/POST — shared recipes (optional, Upstash/Vercel Redis REST)
+  community.js       GET/POST — shared recipes (optional, Neon/Postgres via DATABASE_URL)
+  photo.js           GET — dish photo + credit from Wikipedia/Wikimedia Commons
   _lib/http.js       body parsing, origin check, per-IP rate limit
 src/
   App.jsx            tabs, persisted state, recipe sheet
@@ -36,6 +43,10 @@ src/
   components/        RecipeCard, RecipeSheet (servings, prices, timer), Sheet
   lib/               diet.js, shopping.js, budget.js, recipe.js, api.js, persist.js
   data/              recipes.js (library), guide.js (stores, allergens, seasonal…)
+  i18n/              ui.js (interface strings), data.es.js / data.ja.js (recipes + guide)
+db/schema.sql        community table (also created automatically)
+server.js            Express server for Render / any Node host
+render.yaml          Render Blueprint
 tests/lib.test.js    unit tests for diet, list merging, prices, budget
 ```
 
@@ -47,31 +58,47 @@ npm test
 npm run dev        # UI only; the library, pantry, list and budget all work without a server
 ```
 
-To also run the API functions locally:
+To run the full app with the API locally:
 
 ```bash
-npm i -g vercel
-cp .env.example .env.local   # add ANTHROPIC_API_KEY
-vercel dev
+cp .env.example .env.local   # add ANTHROPIC_API_KEY (and DATABASE_URL if you want community)
+npm run build
+node --env-file=.env.local server.js   # http://localhost:3000
 ```
 
-## Deploy (Vercel)
+## Deploy on Render (recommended) + Neon
 
-1. Import the repo in Vercel. It detects Vite.
-2. Settings → Environment Variables:
+1. **Neon**: create a project at neon.tech (free tier) and copy its connection string.
+   The table is created on first use; `db/schema.sql` has it if you prefer to run it yourself.
+2. **Render**: New → Blueprint → pick this repo. `render.yaml` creates one web service
+   (`npm ci && npm run build`, then `npm start`).
+3. In the service's Environment tab set:
 
 | Variable | Needed for | Notes |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Generating recipes | From console.anthropic.com |
-| `ALLOWED_ORIGIN` | Recommended | e.g. `https://your-app.vercel.app` — rejects calls from other sites |
-| `ANTHROPIC_MODEL` | Optional | Defaults to `claude-opus-5-5` |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Community recipes | Or add Vercel's Redis/KV integration, which sets `KV_REST_API_URL` / `KV_REST_API_TOKEN` |
-| `VITE_KOFI_URL`, `VITE_PAYPAL_URL` | Donation buttons | Hidden when empty |
+| `DATABASE_URL` | Community recipes | Neon connection string |
+| `ALLOWED_ORIGIN` | Recommended | e.g. `https://kaimono-cook.onrender.com` |
+| `ANTHROPIC_MODEL` | Optional | Defaults to `claude-haiku-5-5` |
+| `VITE_KOFI_URL`, `VITE_PAYPAL_URL` | Donation buttons | Build-time; hidden when empty |
 
-3. Redeploy so the variables take effect.
+Render's free plan sleeps after ~15 minutes without traffic; the first visit afterwards takes
+up to a minute. The app itself is cached by the browser, but the first recipe generation or
+community load after a sleep will be slow. The Starter plan avoids this.
 
-Without `ANTHROPIC_API_KEY` the app still works fully from the built-in library; the generate
-button shows that generation isn't available.
+### Vercel instead
+
+The same `api/` handlers also run as Vercel functions (`vercel.json` is kept). Import the repo,
+set the same variables, deploy.
+
+Without `ANTHROPIC_API_KEY` the app still works fully from the built-in library; without
+`DATABASE_URL` the community page says it is not enabled.
+
+## Moderating community posts
+
+```sql
+UPDATE community_recipes SET hidden = true WHERE id = 123;
+```
 
 ## Why the API proxy changed
 
