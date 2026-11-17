@@ -82,9 +82,9 @@ node --env-file=.env.local server.js   # http://localhost:3000
 | `ANTHROPIC_MODEL` | Optional | Defaults to `claude-haiku-5-5` |
 | `VITE_KOFI_URL`, `VITE_PAYPAL_URL` | Donation buttons | Build-time; hidden when empty |
 
-Render's free plan sleeps after ~15 minutes without traffic; the first visit afterwards takes
-up to a minute. The app itself is cached by the browser, but the first recipe generation or
-community load after a sleep will be slow. The Starter plan avoids this.
+Render's free plan sleeps after ~15 minutes without traffic, and the first visit afterwards can
+take up to a minute. For a public app use the Starter plan, or serve the frontend as a Render
+Static Site and keep only the API on the web service.
 
 ### Vercel instead
 
