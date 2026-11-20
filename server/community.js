@@ -1,15 +1,22 @@
 // /api/community — shared recipes submitted by users.
 //
-// Storage: Postgres via Neon's serverless driver (DATABASE_URL). Without it
+// Storage: Postgres via Neon's serverless driver (env DATABASE_URL). Without it
 // the endpoint answers 503 and the app shows the feature as unavailable.
 // Schema: db/schema.sql (also created automatically on first request).
 // Moderation: UPDATE community_recipes SET hidden = true WHERE id = …;
 import { neon } from '@neondatabase/serverless';
-import { readBody, originAllowed, clientIp, rateLimited, str } from './_lib/http.js';
+import { readBody, originAllowed, clientIp, rateLimited, str } from './http.js';
 
-const DB_URL = process.env.DATABASE_URL;
-const sql = DB_URL ? neon(DB_URL) : null;
 const PAGE = 200;
+
+let sql = null;
+let sqlUrl = null;
+function db(env) {
+  const url = env?.DATABASE_URL;
+  if (!url) return null;
+  if (url !== sqlUrl) { sql = neon(url); sqlUrl = url; ready = undefined; }
+  return sql;
+}
 
 let ready;
 function ensureSchema() {
@@ -59,7 +66,7 @@ function cleanRecipe(r) {
 }
 
 export default async function handler(req, res) {
-  if (!sql) return res.status(503).json({ error: 'Community recipes are not set up on this server.' });
+  if (!db(req.env)) return res.status(503).json({ error: 'Community recipes are not set up on this server.' });
   if (!originAllowed(req)) return res.status(403).json({ error: 'Origin not allowed' });
 
   try {

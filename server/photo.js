@@ -4,9 +4,9 @@
 // article's lead image, keeping it only if it lives on Wikimedia Commons
 // (free licence) so the credit and licence can be shown. Results are cached
 // at the CDN for a week; misses are cached for a day.
-import { str } from './_lib/http.js';
+import { str } from './http.js';
 
-const UA = 'KaimonoCook/2.0 (budget recipe app; https://github.com/)';
+const UA = 'KaimonoCook/2.0 (budget recipe app)';
 const WIDTH = 640;
 
 async function getJson(url) {

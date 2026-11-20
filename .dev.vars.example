@@ -1,0 +1,4 @@
+# Local secrets for `npm run dev:worker`. Copy to .dev.vars (git-ignored).
+# In production set these in Cloudflare: Worker → Settings → Variables and Secrets.
+ANTHROPIC_API_KEY=
+DATABASE_URL=

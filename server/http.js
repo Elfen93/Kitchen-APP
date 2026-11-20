@@ -1,4 +1,7 @@
-// Small helpers shared by the serverless functions.
+// Helpers shared by the API handlers. Handlers take (req, res) where
+//   req = { method, query, headers (lower-case keys), body, env }
+//   res = { status(code), json(body), setHeader(name, value) }
+// worker/index.js (Cloudflare) and server.js (Node) build these objects.
 
 export function readBody(req) {
   let body = req.body;
@@ -8,17 +11,25 @@ export function readBody(req) {
   return body && typeof body === 'object' ? body : {};
 }
 
-/** Rejects cross-site calls when ALLOWED_ORIGIN is set (comma-separated list). */
+/**
+ * Only the app's own pages may call the API. Browsers send Origin on POST;
+ * it must match the host the request was sent to, or one listed in
+ * ALLOWED_ORIGIN (comma-separated) for extra domains.
+ */
 export function originAllowed(req) {
-  const allowed = (process.env.ALLOWED_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (!allowed.length) return true;
   const origin = req.headers.origin;
-  // Same-origin GETs from the browser may omit Origin; POSTs from browsers send it.
   if (!origin) return req.method === 'GET';
-  return allowed.includes(origin);
+  const extra = (req.env?.ALLOWED_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (extra.includes(origin)) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
 }
 
 export function clientIp(req) {
+  if (req.headers['cf-connecting-ip']) return req.headers['cf-connecting-ip'];
   const fwd = req.headers['x-forwarded-for'];
   return (Array.isArray(fwd) ? fwd[0] : (fwd || '')).split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
 }

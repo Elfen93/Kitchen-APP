@@ -1,11 +1,11 @@
-// Standalone Node server (used on Render, or anywhere that runs `npm start`).
-// Serves the built app from dist/ and the same handlers Vercel runs from api/.
+// Node server for local development or any Node host (`npm start`).
+// Serves dist/ and the same API handlers the Cloudflare Worker uses.
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import generate from './api/generate.js';
-import community from './api/community.js';
-import photo from './api/photo.js';
+import generate from './server/generate.js';
+import community from './server/community.js';
+import photo from './server/photo.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(here, 'dist');
@@ -21,6 +21,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use('/api', express.json({ limit: '64kb' }));
+app.use('/api', (req, res, next) => { req.env = process.env; next(); });
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 app.all('/api/generate', wrap(generate));

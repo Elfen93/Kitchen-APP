@@ -4,9 +4,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { readBody, originAllowed, clientIp, rateLimited, str } from './_lib/http.js';
+import { readBody, originAllowed, clientIp, rateLimited, str } from './http.js';
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
+const DEFAULT_MODEL = 'claude-haiku-5-5';
 const LANGS = { en: 'English', es: 'Spanish', ja: 'Japanese' };
 
 const MEALS = {
@@ -93,7 +93,8 @@ function buildPrompt(p) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!originAllowed(req)) return res.status(403).json({ error: 'Origin not allowed' });
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const env = req.env || {};
+  if (!env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'Recipe generation is not configured on this server.' });
   }
   if (rateLimited(`gen:${clientIp(req)}`, 12, 10 * 60 * 1000)) {
@@ -114,10 +115,10 @@ export default async function handler(req, res) {
     calorieTarget: Math.min(1500, Math.max(0, Math.round(Number(b.calorieTarget) || 0))),
   };
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   try {
     const msg = await client.messages.parse({
-      model: MODEL,
+      model: env.ANTHROPIC_MODEL || DEFAULT_MODEL,
       max_tokens: 16000,
       output_config: { effort: 'low', format: zodOutputFormat(Output) },
       system: 'You are a practical home-cooking assistant for people on low incomes living in Japan, many of them recently arrived. You write honest, cheap, filling recipes.',

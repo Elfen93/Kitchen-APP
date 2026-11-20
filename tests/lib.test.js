@@ -118,3 +118,20 @@ describe('i18n', async () => {
     expect(pantryMatches(r, ['huevo'])).toBe(1);
   });
 });
+
+describe('API origin check', async () => {
+  const { originAllowed } = await import('../server/http.js');
+  const req = (origin, host, env = {}) => ({ method: 'POST', headers: { origin, host }, env });
+  it('allows the same host', () => {
+    expect(originAllowed(req('https://kaimono-cook.example.workers.dev', 'kaimono-cook.example.workers.dev'))).toBe(true);
+  });
+  it('rejects other sites', () => {
+    expect(originAllowed(req('https://evil.example', 'kaimono-cook.example.workers.dev'))).toBe(false);
+  });
+  it('allows extra origins from ALLOWED_ORIGIN', () => {
+    expect(originAllowed(req('https://kaimono.cook', 'x.workers.dev', { ALLOWED_ORIGIN: 'https://kaimono.cook' }))).toBe(true);
+  });
+  it('rejects POST without Origin', () => {
+    expect(originAllowed({ method: 'POST', headers: { host: 'a' }, env: {} })).toBe(false);
+  });
+});
