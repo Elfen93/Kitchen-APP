@@ -38,6 +38,7 @@ server/
   photo.js           GET /api/photo — dish photo + credit from Wikipedia/Wikimedia Commons
   http.js            body parsing, same-origin check, per-IP rate limit
 worker/index.js      Cloudflare Worker: routes /api/* to the handlers above
+functions/api/       same API as Cloudflare Pages Functions
 wrangler.jsonc       Worker + static assets config
 public/_headers      security headers (CSP) for static files
 src/
@@ -81,6 +82,19 @@ npm run dev:worker               # http://localhost:8787
 
    `ANTHROPIC_MODEL` lives in `wrangler.jsonc` (`claude-haiku-5-5`).
 4. Every push to the production branch rebuilds and deploys.
+
+### Or as a Cloudflare Pages project
+
+The repo also works as a Pages project (`functions/api/[[path]].js` runs the same API code).
+In the Pages project → **Settings → Build**:
+
+- Framework preset: None (or Vite)
+- Build command: `npm run build`
+- Build output directory: **`dist`** (if this is wrong the site loads as a blank page)
+- Production branch: the branch you deploy from
+
+Then add `ANTHROPIC_API_KEY` and `DATABASE_URL` under **Settings → Variables and Secrets**
+(type Secret, Production) and redeploy.
 
 The API only accepts calls from the same domain the app is served from. If you add a custom
 domain and keep the `workers.dev` one too, nothing else is needed; to allow another site, set
